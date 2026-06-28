@@ -1,0 +1,9 @@
+# PoC 전용 의존성 (서비스 requirements.txt와 별개)
+
+torch>=2.0.0          # Depth-Anything v2 모델 실행
+torchvision>=0.15.0
+transformers>=4.40.0  # Hugging Face pipeline (depth-estimation)
+pillow>=10.0.0        # 이미지 로드
+numpy>=2.0.0
+zstandard>=0.23.0     # 압축 테스트
+matplotlib>=3.8.0     # 블렌딩 알파 시각화
