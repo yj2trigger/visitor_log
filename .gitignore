@@ -7,3 +7,7 @@ spike/sample/
 *.egg-info/
 dist/
 build/
+Depth*.json
+Depth*.png
+Screen*.json
+Screen*.png
