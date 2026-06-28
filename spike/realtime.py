@@ -33,7 +33,6 @@ import matplotlib.pyplot as plt
 from PIL import Image
 from transformers import pipeline as hf_pipeline
 
-from app.processing.pointcloud import downsample_voxel
 from app.processing.blend_zones import past_scene_alpha
 
 # ── 설정 상수 ──────────────────────────────────────────────────────────────
@@ -281,22 +280,33 @@ def main():
             ).astype(np.float32) / 255.0
 
             points = unproject(rgb_small_f, depth, fx_d, fy_d, cx_d, cy_d)
-            points = downsample_voxel(points, VOXEL_SIZE)
-            latest_points = points
+
+            # O3D C++ 해시맵 다운샘플 (numpy unique 대비 10~100배 빠름)
+            new_pcd = make_o3d_pointcloud(points).voxel_down_sample(VOXEL_SIZE)
+
+            if current_pcd is None:
+                # 최초 1회 씬에 추가 → GPU 버퍼 할당
+                current_pcd = new_pcd
+                vis.add_geometry(current_pcd, reset_bounding_box=True)
+            else:
+                # 기존 GPU 버퍼에 데이터만 덮어씀 (재할당 없음)
+                current_pcd.points = new_pcd.points
+                current_pcd.colors = new_pcd.colors
+                vis.update_geometry(current_pcd)
+
+            current_pcd_ref[0] = current_pcd
+
+            # save_ply용 numpy 배열 갱신
+            latest_points = np.hstack([
+                np.asarray(current_pcd.points, dtype=np.float32),
+                np.asarray(current_pcd.colors, dtype=np.float32),
+            ])
 
             # depth placeholder 갱신 (창 크기 고정 유지)
             depth_norm = cv2.normalize(depth, None, 0, 255,
                                        cv2.NORM_MINMAX).astype(np.uint8)
             depth_vis  = cv2.applyColorMap(depth_norm, cv2.COLORMAP_MAGMA)
             depth_placeholder[:] = cv2.resize(depth_vis, (orig_w, orig_h))
-
-            # 뷰어 업데이트 (단순 교체)
-            pcd = make_o3d_pointcloud(points)
-            if current_pcd is not None:
-                vis.remove_geometry(current_pcd, reset_bounding_box=False)
-            vis.add_geometry(pcd, reset_bounding_box=(current_pcd is None))
-            current_pcd = pcd
-            current_pcd_ref[0] = pcd
 
         vis.poll_events()
         apply_keyboard_move(vis.get_view_control())
