@@ -185,11 +185,13 @@ def visualize_blend(points: np.ndarray,
 
 
 def apply_keyboard_move(vc) -> None:
-    if keyboard.is_pressed('w'):  vc.scale(1.1)
-    if keyboard.is_pressed('s'):  vc.scale(0.9)
-    if keyboard.is_pressed('a'):  vc.translate(-30, 0)
-    if keyboard.is_pressed('d'):  vc.translate(30, 0)
-    if keyboard.is_pressed('up'): vc.translate(0, -30)
+    if keyboard.is_pressed('w'):    vc.scale(-2)
+    if keyboard.is_pressed('x'):    vc.scale(2)
+    if keyboard.is_pressed('a'):    vc.rotate(-10, 0)
+    if keyboard.is_pressed('d'):    vc.rotate(10, 0)
+    if keyboard.is_pressed('left'): vc.translate(-30, 0)
+    if keyboard.is_pressed('right'):vc.translate(30, 0)
+    if keyboard.is_pressed('up'):   vc.translate(0, -30)
     if keyboard.is_pressed('down'): vc.translate(0, 30)
 
 
@@ -228,18 +230,10 @@ def main():
 
     current_pcd_ref = [None]
 
-    def make_cycle_callback(delta):
-        def callback(vis, _key, action):
-            if action != 1: return False
-            saved_index[0] += delta
-            load_ply_to_viewer(vis, current_pcd_ref)
-            return False
-        return callback
-
     vis = o3d.visualization.VisualizerWithKeyCallback()
     vis.create_window("3D Point Cloud", width=960, height=720)
-    vis.register_key_action_callback(ord('['), make_cycle_callback(-1))
-    vis.register_key_action_callback(ord(']'), make_cycle_callback(+1))
+
+    prev_keys = {'s': False, 'q': False, '[': False, ']': False}
 
     # 깊이 intrinsics (축소된 DEPTH_W × DEPTH_H 기준)
     fx_d, fy_d, cx_d, cy_d = estimate_intrinsics(DEPTH_W, DEPTH_H)
@@ -312,22 +306,33 @@ def main():
         apply_keyboard_move(vis.get_view_control())
         vis.update_renderer()
 
-        key = cv2.waitKey(1) & 0xFF
-        if key == ord('s') and latest_points is not None:
+        cv2.waitKey(1)
+
+        cur = {k: keyboard.is_pressed(k) for k in prev_keys}
+
+        if cur['s'] and not prev_keys['s'] and latest_points is not None:
             from datetime import datetime
             ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-            ply_path = os.path.join(OUTPUT_DIR, f"scene_{ts}.ply")
-            save_ply(latest_points, ply_path)
+            save_ply(latest_points, os.path.join(OUTPUT_DIR, f"scene_{ts}.ply"))
             files = get_ply_files()
             print("── 저장된 파일 목록 ──")
             for i, f in enumerate(files):
                 print(f"  [{i+1}] {f}")
-            print("[ / ] 키로 파일 선택")
             centroid = latest_points[:, :3].mean(axis=0)
-            visualize_blend(latest_points, [centroid],
-                            inner_radius=3.0, outer_radius=10.0)
-        elif key == ord('q'):
+            visualize_blend(latest_points, [centroid], inner_radius=3.0, outer_radius=10.0)
+
+        if cur['q'] and not prev_keys['q']:
             break
+
+        if cur['['] and not prev_keys['[']:
+            saved_index[0] -= 1
+            load_ply_to_viewer(vis, current_pcd_ref)
+
+        if cur[']'] and not prev_keys[']']:
+            saved_index[0] += 1
+            load_ply_to_viewer(vis, current_pcd_ref)
+
+        prev_keys = cur
 
     cap.release()
     vis.destroy_window()
